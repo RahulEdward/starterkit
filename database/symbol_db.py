@@ -1179,23 +1179,28 @@ def search_symbols_by_name(query: str, exchange: str = None, limit: int = 50):
 
 
 
-def search_symbols_in_cache(query: str, exchange: str = None, limit: int = 50):
+def search_symbols_in_cache(query: str, exchange: str = None, broker: str = None, limit: int = 50):
     """
     Search symbols in cache
     
     Args:
         query: Search string
         exchange: Optional exchange filter
+        broker: Optional broker filter (angelone, fyers)
         limit: Maximum results to return
     
     Returns:
         List of matching symbols with details
     """
     try:
-        from broker.angelone.database.master_contract_db import SymToken, db_session
+        from database.symbol import SymToken, db_session
         
         # Build query
         search_query = db_session.query(SymToken)
+        
+        # Filter by broker if provided
+        if broker:
+            search_query = search_query.filter(SymToken.broker == broker)
         
         # Filter by query (search in symbol, brsymbol, name)
         search_query = search_query.filter(

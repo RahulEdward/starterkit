@@ -16,14 +16,20 @@ router = APIRouter(prefix="/api/search", tags=["Search"])
 @router.get("/symbols")
 async def search_symbols(
     query: str = Query(..., min_length=1, description="Search query"),
-    exchange: Optional[str] = Query(None, description="Exchange filter (NSE, NFO, BSE, etc.)")
+    exchange: Optional[str] = Query(None, description="Exchange filter (NSE, NFO, BSE, etc.)"),
+    broker: Optional[str] = Query(None, description="Broker filter (angelone, fyers)")
 ):
     """
     Search symbols - shows both universal format and broker-specific format
     
+    Parameters:
+    - query: Search query (required)
+    - exchange: Exchange filter (optional)
+    - broker: Broker filter (optional) - filters symbols by broker
+    
     Returns:
     - symbol: Best-Option universal format
-    - brsymbol: Broker-specific format (AngelOne)
+    - brsymbol: Broker-specific format
     - exchange: Exchange name
     - token: Instrument token
     - Other details: expiry, strike, lotsize, etc.
@@ -33,10 +39,10 @@ async def search_symbols(
             raise HTTPException(status_code=400, detail="Query cannot be empty")
         
         query = query.strip().upper()
-        logger.info(f"Searching symbols: query='{query}', exchange={exchange}")
+        logger.info(f"Searching symbols: query='{query}', exchange={exchange}, broker={broker}")
         
-        # Search in database
-        results = search_symbols_in_cache(query, exchange, limit=50)
+        # Search in database with broker filter
+        results = search_symbols_in_cache(query, exchange, broker, limit=50)
         
         if not results:
             return {

@@ -69,6 +69,11 @@ function Dashboard() {
       if (selectedExchange) {
         params.append('exchange', selectedExchange);
       }
+      
+      // Add broker filter from logged-in user
+      if (user && user.broker) {
+        params.append('broker', user.broker);
+      }
 
       const response = await fetch(`http://127.0.0.1:8000/api/search/symbols?${params.toString()}`);
       if (response.ok) {

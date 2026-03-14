@@ -215,7 +215,6 @@ def process_fyers_nse_csv(path):
     # Assigning headers to the DataFrame
     df.columns = headers
 
-    df["broker"] = "fyers"  # Add broker identifier
     df["token"] = df["Fytoken"]
     df["name"] = df["Symbol Details"]
     df["expiry"] = df["Expiry date"]
@@ -300,7 +299,6 @@ def process_fyers_bse_csv(path):
     # Assigning headers to the DataFrame
     df.columns = headers
 
-    df["broker"] = "fyers"  # Add broker identifier
     df["token"] = df["Fytoken"]
     df["name"] = df["Symbol Details"]
     df["expiry"] = df["Expiry date"]
@@ -412,7 +410,6 @@ def process_fyers_nfo_csv(path):
 
     df = pd.read_csv(file_path, names=headers, dtype=data_types)
 
-    df["broker"] = "fyers"  # Add broker identifier
     df["token"] = df["Fytoken"]
     df["name"] = df["Symbol Details"]
 
@@ -490,7 +487,6 @@ def process_fyers_cds_json(path):
     df = pd.DataFrame(list(data.values()))
 
     # Map JSON fields to Best-Option schema
-    df["broker"] = "fyers"  # Add broker identifier
     df["token"] = df["fyToken"]
     df["name"] = df["symbolDetails"]
 
@@ -548,7 +544,6 @@ def process_fyers_bfo_csv(path):
 
     df = pd.read_csv(file_path, names=headers, dtype=data_types)
 
-    df["broker"] = "fyers"  # Add broker identifier
     df["token"] = df["Fytoken"]
     df["name"] = df["Symbol Details"]
 
@@ -626,7 +621,6 @@ def process_fyers_mcx_json(path):
     df = pd.DataFrame(list(data.values()))
 
     # Map JSON fields to Best-Option schema
-    df["broker"] = "fyers"  # Add broker identifier
     df["token"] = df["fyToken"]
     df["name"] = df["symbolDetails"]
 
