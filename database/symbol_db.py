@@ -1231,3 +1231,44 @@ def search_symbols_in_cache(query: str, exchange: str = None, limit: int = 50):
     except Exception as e:
         logger.error(f"Error searching symbols: {str(e)}")
         return []
+
+
+def get_symbol_token(symbol: str, exchange: str) -> dict | None:
+    """
+    Get token and broker symbol for a given Best-Option symbol and exchange
+    Used by WebSocket proxy for symbol mapping
+    
+    Args:
+        symbol: Best-Option universal symbol
+        exchange: Exchange code
+        
+    Returns:
+        dict with 'token', 'brsymbol', 'brexchange' or None if not found
+    """
+    cache = get_cache()
+
+    if cache.cache_loaded and cache.is_cache_valid():
+        symbol_data = cache.get_symbol_info(symbol, exchange)
+        if symbol_data:
+            return {
+                "token": symbol_data.token,
+                "brsymbol": symbol_data.brsymbol,
+                "brexchange": symbol_data.brexchange
+            }
+
+    # Fallback to database
+    cache.stats.db_queries += 1
+    try:
+        from database.symbol import SymToken
+
+        sym_token = SymToken.query.filter_by(symbol=symbol, exchange=exchange).first()
+        if sym_token:
+            return {
+                "token": sym_token.token,
+                "brsymbol": sym_token.brsymbol,
+                "brexchange": sym_token.brexchange
+            }
+        return None
+    except Exception as e:
+        logger.exception(f"Error querying database for symbol token: {e}")
+        return None
