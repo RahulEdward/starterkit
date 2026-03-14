@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 function Register() {
@@ -9,7 +9,9 @@ function Register() {
     password: '',
     confirm_password: '',
     broker: '',
-    broker_api_key: ''
+    broker_api_key: '',
+    broker_api_secret: '',  // For Fyers
+    redirect_url: 'http://127.0.0.1:5173/fyers-callback'  // Default for Fyers (127.0.0.1 required, not localhost)
   });
   const [brokers, setBrokers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -164,11 +166,11 @@ function Register() {
             </select>
           </div>
 
-          {/* Broker API Key (conditional) */}
-          {selectedBroker && selectedBroker.requires_api_key && (
+          {/* AngelOne API Key */}
+          {formData.broker === 'angelone' && (
             <div>
               <label className="block text-gray-300 mb-2">
-                {selectedBroker.name} API Key
+                AngelOne API Key
               </label>
               <input
                 type="text"
@@ -177,12 +179,71 @@ function Register() {
                 onChange={handleChange}
                 required
                 className="w-full px-4 py-2 bg-gray-700 text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter your broker API key"
+                placeholder="Enter your AngelOne API key"
               />
               <p className="text-gray-400 text-sm mt-1">
-                Get this from your {selectedBroker.name} dashboard
+                Get this from your AngelOne dashboard
               </p>
             </div>
+          )}
+
+          {/* Fyers Broker Fields */}
+          {formData.broker === 'fyers' && (
+            <>
+              <div>
+                <label className="block text-gray-300 mb-2">
+                  Fyers App ID (API Key)
+                </label>
+                <input
+                  type="text"
+                  name="broker_api_key"
+                  value={formData.broker_api_key}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-4 py-2 bg-gray-700 text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter your Fyers App ID"
+                />
+                <p className="text-gray-400 text-sm mt-1">
+                  Get this from your Fyers dashboard
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-gray-300 mb-2">
+                  Fyers Secret ID (API Secret)
+                </label>
+                <input
+                  type="password"
+                  name="broker_api_secret"
+                  value={formData.broker_api_secret}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-4 py-2 bg-gray-700 text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter your Fyers Secret ID"
+                />
+                <p className="text-gray-400 text-sm mt-1">
+                  Keep this secret and secure
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-gray-300 mb-2">
+                  Redirect URL
+                </label>
+                <input
+                  type="text"
+                  name="redirect_url"
+                  value={formData.redirect_url}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-4 py-2 bg-gray-700 text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="http://127.0.0.1:5173/fyers-callback"
+                />
+                <p className="text-gray-400 text-sm mt-1">
+                  ⚠️ Use 127.0.0.1 (not localhost) - Fyers requirement
+                </p>
+              </div>
+            </>
           )}
 
           {/* Submit Button */}

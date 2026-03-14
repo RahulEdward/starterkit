@@ -62,8 +62,10 @@ class User(Base):
     name = Column(String(100), nullable=False)
     email = Column(String(120), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
-    broker = Column(String(50), nullable=False)  # angelone, zerodha, dhan
-    broker_api_key = Column(String(500), nullable=True)  # Broker API key
+    broker = Column(String(50), nullable=False)  # angelone, fyers, zerodha, dhan
+    broker_api_key = Column(String(500), nullable=True)  # Broker API key / App ID
+    broker_api_secret = Column(String(500), nullable=True)  # Broker API secret (for Fyers)
+    redirect_url = Column(String(500), nullable=True)  # Redirect URL (for Fyers OAuth)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -91,14 +93,16 @@ def init_db():
     print("User database initialized successfully")
 
 
-def add_user(name: str, email: str, password: str, broker: str, broker_api_key: str = None):
+def add_user(name: str, email: str, password: str, broker: str, broker_api_key: str = None, broker_api_secret: str = None, redirect_url: str = None):
     """Add new user to database"""
     try:
         user = User(
             name=name,
             email=email,
             broker=broker,
-            broker_api_key=broker_api_key
+            broker_api_key=broker_api_key,
+            broker_api_secret=broker_api_secret,
+            redirect_url=redirect_url
         )
         user.set_password(password)
         db_session.add(user)

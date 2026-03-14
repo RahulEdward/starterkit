@@ -3,16 +3,19 @@ Authentication Routes
 User registration and login endpoints
 """
 import asyncio
+import os
 from threading import Thread
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, EmailStr
 
-from broker.angelone.api.auth_api import authenticate_broker
-from broker.angelone.database.master_contract_db import master_contract_download
+from broker.angelone.api.auth_api import authenticate_broker as authenticate_angelone
+from broker.angelone.database.master_contract_db import master_contract_download as angelone_master_contract_download
+from broker.fyers.api.auth_api import authenticate_broker as authenticate_fyers
+from broker.fyers.database.master_contract_db import master_contract_download as fyers_master_contract_download
 from database.auth_db import upsert_broker_auth
 from database.master_contract_status_db import init_broker_status, update_status
-from database.user_db import add_user, authenticate_user, get_user_by_email
+from database.user_db import add_user, authenticate_user, get_user_by_email, get_user_by_broker
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -27,7 +30,11 @@ class RegisterRequest(BaseModel):
     password: str
     confirm_password: str
     broker: str
-    broker_api_key: str = None
+    broker_api_key: str = None  # For AngelOne and Fyers App ID
+    broker_api_secret: str = None  # For Fyers Secret ID
+    redirect_url: str = None  # For Fyers OAuth redirect  # For AngelOne and Fyers App ID
+    broker_api_secret: str = None  # For Fyers Secret ID
+    redirect_url: str = None  # For Fyers OAuth redirect
 
 
 class RegisterResponse(BaseModel):
@@ -38,9 +45,10 @@ class RegisterResponse(BaseModel):
 
 class LoginRequest(BaseModel):
     broker: str
-    client_id: str
-    pin: str
-    totp: str
+    client_id: str = None  # Required for AngelOne
+    pin: str = None  # Required for AngelOne
+    totp: str = None  # Required for AngelOne
+    request_token: str = None  # Required for Fyers OAuth flow
     email: str = None  # Optional - will be fetched from database if not provided
 
 
@@ -93,13 +101,49 @@ async def register(data: RegisterRequest):
             detail="API Key is required for AngelOne broker"
         )
     
+    if data.broker == "fyers":
+        if not data.broker_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="App ID (API Key) is required for Fyers broker"
+            )
+        if not data.broker_api_secret:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Secret ID (API Secret) is required for Fyers broker"
+            )
+        if not data.redirect_url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Redirect URL is required for Fyers broker"
+            )
+    
+    if data.broker == "fyers":
+        if not data.broker_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="App ID is required for Fyers broker"
+            )
+        if not data.broker_api_secret:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Secret ID is required for Fyers broker"
+            )
+        if not data.redirect_url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Redirect URL is required for Fyers broker"
+            )
+    
     # Create user
     user = add_user(
         name=data.name,
         email=data.email,
         password=data.password,
         broker=data.broker,
-        broker_api_key=data.broker_api_key
+        broker_api_key=data.broker_api_key,
+        broker_api_secret=data.broker_api_secret,
+        redirect_url=data.redirect_url
     )
     
     if not user:
@@ -154,6 +198,13 @@ async def login(data: LoginRequest):
     
     # Authenticate with broker
     if data.broker == "angelone":
+        # Validate required fields for AngelOne
+        if not data.client_id or not data.pin or not data.totp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="client_id, pin, and totp are required for AngelOne"
+            )
+        
         # Get broker API key from user's database record
         broker_api_key = user.broker_api_key
         if not broker_api_key:
@@ -162,7 +213,7 @@ async def login(data: LoginRequest):
                 detail="Broker API key not found. Please contact support."
             )
         
-        auth_token, feed_token, error = authenticate_broker(
+        auth_token, feed_token, error = authenticate_angelone(
             clientcode=data.client_id,
             broker_pin=data.pin,
             totp_code=data.totp,
@@ -205,6 +256,72 @@ async def login(data: LoginRequest):
             feed_token=feed_token  # Return feed_token to frontend
         )
     
+    elif data.broker == "fyers":
+        # Validate required fields for Fyers
+        if not data.request_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="request_token is required for Fyers OAuth flow"
+            )
+        
+        # Get Fyers credentials from user's database record
+        broker_api_key = user.broker_api_key  # App ID
+        broker_api_secret = user.broker_api_secret  # Secret ID
+        
+        if not broker_api_key or not broker_api_secret:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Fyers credentials not found. Please register again."
+            )
+        
+        # Authenticate with Fyers using request_token
+        # Note: Fyers auth_api needs to be updated to accept api_key and api_secret as parameters
+        access_token, response_data = authenticate_fyers(
+            request_token=data.request_token,
+            api_key=broker_api_key,
+            api_secret=broker_api_secret
+        )
+        
+        if not access_token:
+            error_msg = response_data.get("message", "Authentication failed") if response_data else "Authentication failed"
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Fyers authentication failed: {error_msg}"
+            )
+        
+        # Extract tokens from response
+        refresh_token = response_data.get("data", {}).get("refresh_token")
+        
+        # Store broker auth tokens
+        upsert_broker_auth(
+            user_id=user.id,
+            broker=data.broker,
+            broker_user_id=user.email,  # Fyers uses email as user identifier
+            auth_token=access_token,
+            feed_token=refresh_token  # Store refresh_token as feed_token
+        )
+        
+        # Initialize master contract status for this broker
+        init_broker_status(data.broker)
+        
+        # Start master contract download in background thread
+        logger.info(f"Starting master contract download for {data.broker}")
+        thread = Thread(target=async_master_contract_download, args=(data.broker,), daemon=True)
+        thread.start()
+        
+        return LoginResponse(
+            status="success",
+            message="Login successful",
+            user=user.to_dict() if hasattr(user, 'to_dict') else {
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "broker": user.broker
+            },
+            auth_token=access_token,
+            feed_token=refresh_token
+        )
+    
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -223,16 +340,57 @@ def async_master_contract_download(broker: str):
         
         # Call the broker-specific download function
         if broker == "angelone":
-            master_contract_download()
+            angelone_master_contract_download()
+        elif broker == "fyers":
+            fyers_master_contract_download()
+        else:
+            raise ValueError(f"Master contract download not implemented for {broker}")
             
         # Update status to success
         update_status(broker, "success", "Master contract downloaded successfully")
         logger.info(f"Master contract download completed for {broker}")
         
+        # Reload symbol cache after download
+        logger.info(f"Reloading symbol cache for {broker}")
+        from database.symbol_db import load_cache_for_broker
+        if load_cache_for_broker(broker):
+            logger.info(f"Symbol cache reloaded successfully for {broker}")
+        else:
+            logger.warning(f"Failed to reload symbol cache for {broker}")
+        
     except Exception as e:
         logger.error(f"Master contract download failed for {broker}: {str(e)}")
         update_status(broker, "error", f"Download failed: {str(e)}")
 
+
+
+@router.get("/user")
+async def get_user_info(email: str = None, broker: str = None):
+    """Get user information by email or broker"""
+    if email:
+        user = get_user_by_email(email)
+    elif broker:
+        user = get_user_by_broker(broker)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either email or broker must be provided"
+        )
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "broker": user.broker,
+        "broker_api_key": user.broker_api_key,
+        "redirect_url": user.redirect_url
+    }
 
 
 @router.post("/logout")
@@ -254,6 +412,12 @@ async def get_brokers():
                 "requires_api_key": True
             },
             {
+                "id": "fyers",
+                "name": "Fyers",
+                "status": "active",
+                "requires_api_key": True
+            },
+            {
                 "id": "zerodha",
                 "name": "Zerodha",
                 "status": "coming_soon",
@@ -266,4 +430,24 @@ async def get_brokers():
                 "requires_api_key": True
             }
         ]
+    }
+
+
+@router.get("/user-by-broker")
+async def get_user_by_broker_endpoint(broker: str):
+    """Get user credentials by broker for OAuth flow"""
+    from database.user_db import get_user_by_broker
+    
+    user = get_user_by_broker(broker)
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No user found for broker {broker}"
+        )
+    
+    return {
+        "broker_api_key": user.broker_api_key,
+        "broker_api_secret": user.broker_api_secret,
+        "redirect_url": user.redirect_url
     }

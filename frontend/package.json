@@ -1,6 +1,7 @@
 {
   "name": "best-option-frontend",
   "version": "1.0.0",
+  "type": "module",
   "description": "Best-Option Desktop App - Frontend",
   "main": "main.js",
   "scripts": {
@@ -9,11 +10,23 @@
     "preview": "vite preview",
     "electron": "electron .",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "npm run build && electron-builder"
+    "electron:build": "npm run build && electron-builder --win --x64 --dir"
   },
   "keywords": ["electron", "react", "trading", "options"],
   "author": "",
   "license": "MIT",
+  "build": {
+    "appId": "com.bestoption.app",
+    "productName": "Best-Option",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.js"
+    ]
+  },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

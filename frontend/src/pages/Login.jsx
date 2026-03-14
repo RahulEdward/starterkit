@@ -43,6 +43,41 @@ function Login() {
     setLoading(true);
 
     try {
+      // Fyers uses OAuth flow - redirect to Fyers login page
+      if (formData.broker === 'fyers') {
+        // Get user's Fyers credentials from database
+        // First, we need to get the user by broker
+        const userResponse = await fetch(`http://127.0.0.1:8000/api/auth/user-by-broker?broker=fyers`);
+        
+        if (!userResponse.ok) {
+          setError('No Fyers account found. Please register first.');
+          setLoading(false);
+          return;
+        }
+        
+        const userData = await userResponse.json();
+        const apiKey = userData.broker_api_key;  // App ID
+        const redirectUri = userData.redirect_url || `${window.location.origin}/fyers-callback`;
+        
+        if (!apiKey) {
+          setError('Fyers App ID not found. Please register again.');
+          setLoading(false);
+          return;
+        }
+        
+        // Store user info for callback page
+        localStorage.setItem('fyers_user', JSON.stringify(userData));
+        
+        // Redirect to Fyers authorization page
+        // Using v3 API (same as OpenAlgo) with production environment (api-t1)
+        const fyersAuthUrl = `https://api-t1.fyers.in/api/v3/generate-authcode?client_id=${apiKey}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&state=sample_state`;
+        
+        console.log('Redirecting to Fyers:', fyersAuthUrl);
+        window.location.href = fyersAuthUrl;
+        return;
+      }
+      
+      // AngelOne uses direct authentication
       const response = await fetch('http://127.0.0.1:8000/api/auth/login', {
         method: 'POST',
         headers: {
@@ -109,7 +144,7 @@ function Login() {
           </div>
 
           {/* Broker Credentials (show when broker selected) */}
-          {formData.broker && (
+          {formData.broker === 'angelone' && (
             <>
               {/* Client ID */}
               <div>
@@ -158,6 +193,18 @@ function Login() {
                 </p>
               </div>
             </>
+          )}
+          
+          {/* Fyers OAuth Login */}
+          {formData.broker === 'fyers' && (
+            <div className="bg-blue-900 p-4 rounded">
+              <p className="text-gray-300 text-sm mb-2">
+                Fyers uses OAuth authentication. Click Login to be redirected to Fyers login page.
+              </p>
+              <p className="text-gray-400 text-xs">
+                You'll need your Fyers API Key and Secret (from registration).
+              </p>
+            </div>
           )}
 
           {/* Submit Button */}

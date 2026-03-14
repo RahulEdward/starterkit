@@ -7,11 +7,9 @@ from datetime import datetime
 
 import pandas as pd
 import requests
-from sqlalchemy import Column, Float, Index, Integer, Sequence, String, create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import scoped_session, sessionmaker
 from dotenv import load_dotenv
 
+from database.symbol import SymToken, db_session, engine, Base
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -19,36 +17,12 @@ logger = get_logger(__name__)
 # Load environment variables
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./best_option.db")  # Default to SQLite
-
-engine = create_engine(DATABASE_URL)
-db_session = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=engine))
-Base = declarative_base()
-Base.query = db_session.query_property()
-
-
-class SymToken(Base):
-    __tablename__ = "symtoken"
-    id = Column(Integer, Sequence("symtoken_id_seq"), primary_key=True)
-    symbol = Column(String, nullable=False, index=True)  # Single column index
-    brsymbol = Column(String, nullable=False, index=True)  # Single column index
-    name = Column(String)
-    exchange = Column(String, index=True)  # Include this column in a composite index
-    brexchange = Column(String, index=True)
-    token = Column(String, index=True)  # Indexed for performance
-    expiry = Column(String)
-    strike = Column(Float)
-    lotsize = Column(Integer)
-    instrumenttype = Column(String)
-    tick_size = Column(Float)
-
-    # Define a composite index on symbol and exchange columns
-    __table_args__ = (Index("idx_symbol_exchange", "symbol", "exchange"),)
-
 
 def init_db():
-    logger.info("Initializing Master Contract DB")
-    Base.metadata.create_all(bind=engine)
+    """Initialize database - uses shared symbol database"""
+    logger.info("AngelOne: Using shared symbol database")
+    # Database already initialized by main app
+    pass
 
 
 def delete_symtoken_table():
@@ -391,25 +365,22 @@ def delete_angel_temp_data(output_path):
 
 
 def master_contract_download():
-    logger.info("Downloading Master Contract")
+    logger.info("Downloading AngelOne Master Contract")
     url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
     output_path = "tmp/angel.json"
     try:
         download_json_angel_data(url, output_path)
         token_df = process_angel_json(output_path)
         delete_angel_temp_data(output_path)
-        # token_df['token'] = pd.to_numeric(token_df['token'], errors='coerce').fillna(-1).astype(int)
 
-        # token_df = token_df.drop_duplicates(subset='symbol', keep='first')
-
-        delete_symtoken_table()  # Consider the implications of this action
+        delete_symtoken_table()  # Delete all symbols before reload
         copy_from_dataframe(token_df)
 
-        logger.info("Master contract download completed successfully")
+        logger.info("AngelOne master contract download completed successfully")
         return True
 
     except Exception as e:
-        logger.error(f"Master contract download failed: {str(e)}")
+        logger.error(f"AngelOne master contract download failed: {str(e)}")
         raise e
 
 
