@@ -1,0 +1,9 @@
+{
+    "Plugin Name": "angelone",
+    "Plugin URI": "https://best-option.in",
+    "Description": "AngelOne Broker Integration for Best-Option",
+    "Version": "1.0",
+    "Author": "Best-Option Team",
+    "Author URI": "https://best-option.in",
+    "Source": "Adapted from OpenAlgo"
+}
