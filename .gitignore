@@ -27,6 +27,7 @@ log/*.log
 # Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/dist-electron/
 frontend/.vite/
 
 # Electron
