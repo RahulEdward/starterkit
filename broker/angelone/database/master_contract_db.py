@@ -121,9 +121,6 @@ def process_angel_json(path):
     # Read JSON data into a DataFrame
     df = pd.read_json(path)
 
-    # Add broker identifier
-    df["broker"] = "angelone"
-
     # Rename the columns based on the database schema
     # Assuming that the JSON structure matches the sample response provided
     df = df.rename(

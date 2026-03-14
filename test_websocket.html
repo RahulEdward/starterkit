@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Market Data Test - Best-Option</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .container {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #4CAF50;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .status.connected {
+            background: #4CAF50;
+            color: white;
+        }
+        .status.disconnected {
+            background: #f44336;
+            color: white;
+        }
+        .status.connecting {
+            background: #ff9800;
+            color: white;
+        }
+        input, button, select {
+            padding: 10px;
+            margin: 5px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            background: #333;
+            color: #fff;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 4px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #4CAF50;
+            padding-left: 10px;
+        }
+        .log-entry.error {
+            border-left-color: #f44336;
+            color: #f44336;
+        }
+        .log-entry.info {
+            border-left-color: #2196F3;
+            color: #2196F3;
+        }
+        .log-entry.data {
+            border-left-color: #ff9800;
+            color: #ff9800;
+        }
+        .market-data {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .ticker {
+            background: #333;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #444;
+        }
+        .ticker.active {
+            border-color: #4CAF50;
+        }
+        .ticker-symbol {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+        .ticker-price {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .ticker-change {
+            font-size: 14px;
+        }
+        .ticker-change.positive {
+            color: #4CAF50;
+        }
+        .ticker-change.negative {
+            color: #f44336;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 Best-Option WebSocket Market Data Test</h1>
+    
+    <div class="container">
+        <h2>Connection Status</h2>
+        <div id="status" class="status disconnected">Disconnected</div>
+        
+        <div class="controls">
+            <input type="number" id="userId" placeholder="User ID" value="1">
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Subscribe to Market Data</h2>
+        <div class="controls">
+            <input type="text" id="symbol" placeholder="Symbol (e.g., SBIN)" value="SBIN">
+            <select id="exchange">
+                <option value="NSE">NSE</option>
+                <option value="NFO">NFO</option>
+                <option value="BSE">BSE</option>
+                <option value="BFO">BFO</option>
+                <option value="MCX">MCX</option>
+                <option value="CDS">CDS</option>
+            </select>
+            <select id="mode">
+                <option value="LTP">LTP (Last Traded Price)</option>
+                <option value="QUOTE">QUOTE (Full Quote)</option>
+                <option value="SNAP_QUOTE">SNAP_QUOTE (Snapshot)</option>
+            </select>
+            <button id="subscribeBtn" onclick="subscribe()" disabled>Subscribe</button>
+            <button id="unsubscribeBtn" onclick="unsubscribe()" disabled>Unsubscribe</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Live Market Data</h2>
+        <div id="marketData" class="market-data">
+            <p style="color: #888;">No subscriptions yet. Subscribe to symbols to see live data.</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Message Log</h2>
+        <button onclick="clearLog()">Clear Log</button>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let isAuthenticated = false;
+        let subscriptions = new Map(); // symbol_exchange -> data
+
+        function updateStatus(status, message) {
+            const statusEl = document.getElementById('status');
+            statusEl.className = `status ${status}`;
+            statusEl.textContent = message;
+        }
+
+        function log(message, type = 'info') {
+            const logEl = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function connect() {
+            const userId = document.getElementById('userId').value;
+            
+            if (!userId) {
+                alert('Please enter User ID');
+                return;
+            }
+
+            updateStatus('connecting', 'Connecting...');
+            log('Connecting to WebSocket server...', 'info');
+
+            // Connect to WebSocket proxy
+            ws = new WebSocket('ws://127.0.0.1:8765');
+
+            ws.onopen = () => {
+                log('WebSocket connected!', 'info');
+                updateStatus('connecting', 'Connected - Authenticating...');
+                
+                // Authenticate
+                ws.send(JSON.stringify({
+                    action: 'authenticate',
+                    user_id: parseInt(userId)
+                }));
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleMessage(data);
+                } catch (e) {
+                    log(`Error parsing message: ${e.message}`, 'error');
+                }
+            };
+
+            ws.onerror = (error) => {
+                log(`WebSocket error: ${error}`, 'error');
+                updateStatus('disconnected', 'Error');
+            };
+
+            ws.onclose = () => {
+                log('WebSocket disconnected', 'info');
+                updateStatus('disconnected', 'Disconnected');
+                isAuthenticated = false;
+                updateButtons();
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function handleMessage(data) {
+            const type = data.type;
+
+            if (type === 'authenticated') {
+                log(`Authenticated as User ${data.user_id} (Broker: ${data.broker})`, 'info');
+                updateStatus('connected', `Connected - User ${data.user_id} (${data.broker})`);
+                isAuthenticated = true;
+                updateButtons();
+            } else if (type === 'subscribed') {
+                log(`Subscribed to ${data.symbol} on ${data.exchange} (${data.mode})`, 'info');
+                const key = `${data.symbol}_${data.exchange}`;
+                if (!subscriptions.has(key)) {
+                    subscriptions.set(key, {
+                        symbol: data.symbol,
+                        exchange: data.exchange,
+                        mode: data.mode,
+                        ltp: 0,
+                        change: 0
+                    });
+                    updateMarketDataDisplay();
+                }
+            } else if (type === 'unsubscribed') {
+                log(`Unsubscribed from ${data.symbol} on ${data.exchange}`, 'info');
+                const key = `${data.symbol}_${data.exchange}`;
+                subscriptions.delete(key);
+                updateMarketDataDisplay();
+            } else if (type === 'error') {
+                log(`Error: ${data.code} - ${data.message}`, 'error');
+            } else if (type === 'pong') {
+                log('Pong received', 'info');
+            } else {
+                // Market data update
+                log(`Market data: ${JSON.stringify(data)}`, 'data');
+                updateMarketData(data);
+            }
+        }
+
+        function subscribe() {
+            if (!ws || !isAuthenticated) {
+                alert('Please connect and authenticate first');
+                return;
+            }
+
+            const symbol = document.getElementById('symbol').value.toUpperCase();
+            const exchange = document.getElementById('exchange').value;
+            const mode = document.getElementById('mode').value;
+
+            if (!symbol) {
+                alert('Please enter a symbol');
+                return;
+            }
+
+            ws.send(JSON.stringify({
+                action: 'subscribe',
+                symbol: symbol,
+                exchange: exchange,
+                mode: mode
+            }));
+        }
+
+        function unsubscribe() {
+            if (!ws || !isAuthenticated) {
+                alert('Please connect and authenticate first');
+                return;
+            }
+
+            const symbol = document.getElementById('symbol').value.toUpperCase();
+            const exchange = document.getElementById('exchange').value;
+            const mode = document.getElementById('mode').value;
+
+            ws.send(JSON.stringify({
+                action: 'unsubscribe',
+                symbol: symbol,
+                exchange: exchange,
+                mode: mode
+            }));
+        }
+
+        function updateMarketData(data) {
+            // Update subscription data
+            const symbol = data.symbol || data.trading_symbol;
+            const exchange = data.exchange;
+            
+            if (symbol && exchange) {
+                const key = `${symbol}_${exchange}`;
+                if (subscriptions.has(key)) {
+                    const sub = subscriptions.get(key);
+                    sub.ltp = data.ltp || data.last_price || 0;
+                    sub.change = data.change || data.change_percent || 0;
+                    sub.volume = data.volume || 0;
+                    sub.timestamp = new Date().toLocaleTimeString();
+                    updateMarketDataDisplay();
+                }
+            }
+        }
+
+        function updateMarketDataDisplay() {
+            const container = document.getElementById('marketData');
+            
+            if (subscriptions.size === 0) {
+                container.innerHTML = '<p style="color: #888;">No subscriptions yet. Subscribe to symbols to see live data.</p>';
+                return;
+            }
+
+            container.innerHTML = '';
+            
+            subscriptions.forEach((data, key) => {
+                const ticker = document.createElement('div');
+                ticker.className = 'ticker active';
+                
+                const changeClass = data.change >= 0 ? 'positive' : 'negative';
+                const changeSymbol = data.change >= 0 ? '+' : '';
+                
+                ticker.innerHTML = `
+                    <div class="ticker-symbol">${data.symbol} (${data.exchange})</div>
+                    <div class="ticker-price">₹${data.ltp.toFixed(2)}</div>
+                    <div class="ticker-change ${changeClass}">${changeSymbol}${data.change.toFixed(2)}%</div>
+                    <div style="font-size: 12px; color: #888; margin-top: 10px;">
+                        Mode: ${data.mode}<br>
+                        Updated: ${data.timestamp || 'N/A'}
+                    </div>
+                `;
+                
+                container.appendChild(ticker);
+            });
+        }
+
+        function updateButtons() {
+            document.getElementById('connectBtn').disabled = ws !== null;
+            document.getElementById('disconnectBtn').disabled = ws === null;
+            document.getElementById('subscribeBtn').disabled = !isAuthenticated;
+            document.getElementById('unsubscribeBtn').disabled = !isAuthenticated;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // Initialize
+        updateButtons();
+        
+        // Send ping every 30 seconds to keep connection alive
+        setInterval(() => {
+            if (ws && isAuthenticated) {
+                ws.send(JSON.stringify({
+                    action: 'ping',
+                    timestamp: Date.now()
+                }));
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
