@@ -25,21 +25,30 @@ def init_db():
     pass
 
 
-def delete_symtoken_table():
-    logger.info("Deleting Symtoken Table")
-    SymToken.query.delete()
+def delete_symtoken_table(broker="angelone"):
+    """Delete only AngelOne symbols from shared table"""
+    logger.info(f"Deleting {broker} symbols from Symtoken Table")
+    deleted_count = SymToken.query.filter_by(broker=broker).delete()
     db_session.commit()
+    logger.info(f"Deleted {deleted_count} {broker} symbols")
 
 
-def copy_from_dataframe(df):
-    logger.info("Performing Bulk Insert")
+def copy_from_dataframe(df, broker="angelone"):
+    logger.info(f"Performing Bulk Insert for {broker}")
+    
+    # Add broker column to all rows
+    df["broker"] = broker
+    
     # Convert DataFrame to a list of dictionaries
     data_dict = df.to_dict(orient="records")
 
-    # Retrieve existing tokens to filter them out from the insert
-    existing_tokens = {result.token for result in db_session.query(SymToken.token).all()}
+    # Retrieve existing tokens for this broker to filter them out from the insert
+    existing_tokens = {
+        result.token 
+        for result in db_session.query(SymToken.token).filter_by(broker=broker).all()
+    }
 
-    # Filter out data_dict entries with tokens that already exist
+    # Filter out data_dict entries with tokens that already exist for this broker
     filtered_data_dict = [row for row in data_dict if row["token"] not in existing_tokens]
 
     # Insert in bulk the filtered records
@@ -48,12 +57,12 @@ def copy_from_dataframe(df):
             db_session.bulk_insert_mappings(SymToken, filtered_data_dict)
             db_session.commit()
             logger.info(
-                f"Bulk insert completed successfully with {len(filtered_data_dict)} new records."
+                f"Bulk insert completed successfully with {len(filtered_data_dict)} new {broker} records."
             )
         else:
-            logger.info("No new records to insert.")
+            logger.info(f"No new {broker} records to insert.")
     except Exception as e:
-        logger.error(f"Error during bulk insert: {e}")
+        logger.error(f"Error during bulk insert for {broker}: {e}")
         db_session.rollback()
 
 
@@ -111,6 +120,9 @@ def process_angel_json(path):
     """
     # Read JSON data into a DataFrame
     df = pd.read_json(path)
+
+    # Add broker identifier
+    df["broker"] = "angelone"
 
     # Rename the columns based on the database schema
     # Assuming that the JSON structure matches the sample response provided
@@ -368,13 +380,15 @@ def master_contract_download():
     logger.info("Downloading AngelOne Master Contract")
     url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
     output_path = "tmp/angel.json"
+    broker = "angelone"
+    
     try:
         download_json_angel_data(url, output_path)
         token_df = process_angel_json(output_path)
         delete_angel_temp_data(output_path)
 
-        delete_symtoken_table()  # Delete all symbols before reload
-        copy_from_dataframe(token_df)
+        delete_symtoken_table(broker)  # Delete only AngelOne symbols before reload
+        copy_from_dataframe(token_df, broker)  # Insert with broker tag
 
         logger.info("AngelOne master contract download completed successfully")
         return True

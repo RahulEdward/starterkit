@@ -185,8 +185,8 @@ class BrokerSymbolCache:
             # Clear existing cache
             self.clear_cache()
 
-            # Query all symbols from database
-            symbols = SymToken.query.all()
+            # Query only symbols for this broker
+            symbols = SymToken.query.filter_by(broker=broker).all()
 
             if not symbols:
                 logger.warning(f"No symbols found in database for broker: {broker}")
@@ -253,7 +253,7 @@ class BrokerSymbolCache:
 
             load_time = time.time() - start_time
             logger.debug(
-                f"Successfully loaded {self.stats.total_symbols} symbols "
+                f"Successfully loaded {self.stats.total_symbols} symbols for {broker} "
                 f"in {load_time:.2f} seconds. "
                 f"Memory usage: {self.stats.memory_usage_mb:.2f} MB"
             )

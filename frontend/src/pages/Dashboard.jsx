@@ -40,7 +40,14 @@ function Dashboard() {
 
   const checkMasterContractStatus = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/master-contract/status?broker=angelone');
+      // Get broker from logged-in user
+      const userData = localStorage.getItem('user');
+      if (!userData) return;
+      
+      const user = JSON.parse(userData);
+      const broker = user.broker || 'angelone';
+      
+      const response = await fetch(`http://127.0.0.1:8000/api/master-contract/status?broker=${broker}`);
       if (response.ok) {
         const data = await response.json();
         setMasterContract(data);

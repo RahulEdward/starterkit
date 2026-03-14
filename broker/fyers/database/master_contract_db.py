@@ -81,30 +81,35 @@ def init_db():
     pass
 
 
-def delete_symtoken_table():
-    """Delete all symbols from shared table - called before master contract download"""
-    logger.info("Deleting all symbols from shared symtoken table")
+def delete_symtoken_table(broker="fyers"):
+    """Delete only Fyers symbols from shared table - called before master contract download"""
+    logger.info(f"Deleting {broker} symbols from shared symtoken table")
     try:
-        deleted_count = SymToken.query.delete()
+        deleted_count = SymToken.query.filter_by(broker=broker).delete()
         db_session.commit()
-        logger.info(f"Deleted {deleted_count} symbols")
+        logger.info(f"Deleted {deleted_count} {broker} symbols")
     except Exception as e:
-        logger.error(f"Error deleting symbols: {e}")
-        db_session.rollback()
-        logger.error(f"Error deleting Fyers symbols: {e}")
+        logger.error(f"Error deleting {broker} symbols: {e}")
         db_session.rollback()
         raise
 
 
-def copy_from_dataframe(df):
-    logger.info("Performing Bulk Insert")
+def copy_from_dataframe(df, broker="fyers"):
+    logger.info(f"Performing Bulk Insert for {broker}")
+    
+    # Add broker column to all rows
+    df["broker"] = broker
+    
     # Convert DataFrame to a list of dictionaries
     data_dict = df.to_dict(orient="records")
 
-    # Retrieve existing tokens to filter them out from the insert
-    existing_tokens = {result.token for result in db_session.query(SymToken.token).all()}
+    # Retrieve existing tokens for this broker to filter them out from the insert
+    existing_tokens = {
+        result.token 
+        for result in db_session.query(SymToken.token).filter_by(broker=broker).all()
+    }
 
-    # Filter out data_dict entries with tokens that already exist
+    # Filter out data_dict entries with tokens that already exist for this broker
     filtered_data_dict = [row for row in data_dict if row["token"] not in existing_tokens]
 
     # Insert in bulk the filtered records
@@ -113,12 +118,12 @@ def copy_from_dataframe(df):
             db_session.bulk_insert_mappings(SymToken, filtered_data_dict)
             db_session.commit()
             logger.info(
-                f"Bulk insert completed successfully with {len(filtered_data_dict)} new records."
+                f"Bulk insert completed successfully with {len(filtered_data_dict)} new {broker} records."
             )
         else:
-            logger.info("No new records to insert.")
+            logger.info(f"No new {broker} records to insert.")
     except Exception as e:
-        logger.exception(f"Error during bulk insert: {e}")
+        logger.exception(f"Error during bulk insert for {broker}: {e}")
         db_session.rollback()
 
 
@@ -210,6 +215,7 @@ def process_fyers_nse_csv(path):
     # Assigning headers to the DataFrame
     df.columns = headers
 
+    df["broker"] = "fyers"  # Add broker identifier
     df["token"] = df["Fytoken"]
     df["name"] = df["Symbol Details"]
     df["expiry"] = df["Expiry date"]
@@ -294,6 +300,7 @@ def process_fyers_bse_csv(path):
     # Assigning headers to the DataFrame
     df.columns = headers
 
+    df["broker"] = "fyers"  # Add broker identifier
     df["token"] = df["Fytoken"]
     df["name"] = df["Symbol Details"]
     df["expiry"] = df["Expiry date"]
@@ -405,6 +412,7 @@ def process_fyers_nfo_csv(path):
 
     df = pd.read_csv(file_path, names=headers, dtype=data_types)
 
+    df["broker"] = "fyers"  # Add broker identifier
     df["token"] = df["Fytoken"]
     df["name"] = df["Symbol Details"]
 
@@ -482,6 +490,7 @@ def process_fyers_cds_json(path):
     df = pd.DataFrame(list(data.values()))
 
     # Map JSON fields to Best-Option schema
+    df["broker"] = "fyers"  # Add broker identifier
     df["token"] = df["fyToken"]
     df["name"] = df["symbolDetails"]
 
@@ -539,6 +548,7 @@ def process_fyers_bfo_csv(path):
 
     df = pd.read_csv(file_path, names=headers, dtype=data_types)
 
+    df["broker"] = "fyers"  # Add broker identifier
     df["token"] = df["Fytoken"]
     df["name"] = df["Symbol Details"]
 
@@ -616,6 +626,7 @@ def process_fyers_mcx_json(path):
     df = pd.DataFrame(list(data.values()))
 
     # Map JSON fields to Best-Option schema
+    df["broker"] = "fyers"  # Add broker identifier
     df["token"] = df["fyToken"]
     df["name"] = df["symbolDetails"]
 
@@ -682,21 +693,23 @@ def master_contract_download():
     logger.info("Downloading Fyers Master Contract")
 
     output_path = "tmp"
+    broker = "fyers"
+    
     try:
         download_csv_fyers_data(output_path)
-        delete_symtoken_table()  # Delete existing symbols before reload
+        delete_symtoken_table(broker)  # Delete only Fyers symbols before reload
         token_df = process_fyers_nse_csv(output_path)
-        copy_from_dataframe(token_df)
+        copy_from_dataframe(token_df, broker)
         token_df = process_fyers_bse_csv(output_path)
-        copy_from_dataframe(token_df)
+        copy_from_dataframe(token_df, broker)
         token_df = process_fyers_bfo_csv(output_path)
-        copy_from_dataframe(token_df)
+        copy_from_dataframe(token_df, broker)
         token_df = process_fyers_nfo_csv(output_path)
-        copy_from_dataframe(token_df)
+        copy_from_dataframe(token_df, broker)
         token_df = process_fyers_cds_json(output_path)
-        copy_from_dataframe(token_df)
+        copy_from_dataframe(token_df, broker)
         token_df = process_fyers_mcx_json(output_path)
-        copy_from_dataframe(token_df)
+        copy_from_dataframe(token_df, broker)
         delete_fyers_temp_data(output_path)
         
         logger.info("Fyers master contract download completed successfully")

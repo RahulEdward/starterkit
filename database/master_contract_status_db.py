@@ -106,6 +106,11 @@ def update_status(broker: str, status: str, message: str, total_symbols: int = N
             broker_status.message = message
             broker_status.last_updated = datetime.utcnow()
             
+            # If total_symbols not provided, count from database
+            if total_symbols is None and status == "success":
+                from database.symbol import SymToken
+                total_symbols = SymToken.query.filter_by(broker=broker).count()
+            
             if total_symbols is not None:
                 broker_status.total_symbols = total_symbols
             
@@ -116,7 +121,7 @@ def update_status(broker: str, status: str, message: str, total_symbols: int = N
                 broker_status.is_ready = False
             
             db_session.commit()
-            logger.info(f"Updated status for {broker}: {status}")
+            logger.info(f"Updated status for {broker}: {status} ({total_symbols} symbols)")
         else:
             logger.warning(f"No status record found for {broker}")
     except Exception as e:

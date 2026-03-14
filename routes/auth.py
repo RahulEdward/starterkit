@@ -345,9 +345,14 @@ def async_master_contract_download(broker: str):
             fyers_master_contract_download()
         else:
             raise ValueError(f"Master contract download not implemented for {broker}")
-            
-        # Update status to success
-        update_status(broker, "success", "Master contract downloaded successfully")
+        
+        # Count symbols for this broker
+        from database.symbol import SymToken, db_session
+        symbol_count = db_session.query(SymToken).filter_by(broker=broker).count()
+        logger.info(f"Total symbols for {broker}: {symbol_count}")
+        
+        # Update status to success with symbol count
+        update_status(broker, "success", "Master contract downloaded successfully", total_symbols=symbol_count)
         logger.info(f"Master contract download completed for {broker}")
         
         # Reload symbol cache after download

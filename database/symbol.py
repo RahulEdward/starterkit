@@ -40,6 +40,7 @@ class SymToken(Base):
     __tablename__ = "symtoken"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
+    broker = Column(String(20), nullable=False, index=True)  # Broker name (angelone, fyers, etc.)
     symbol = Column(String(50), nullable=False, index=True)  # Best-Option format
     brsymbol = Column(String(50), nullable=False)  # Broker format
     name = Column(String(200))
@@ -54,6 +55,9 @@ class SymToken(Base):
     
     # Composite indexes for fast lookups
     __table_args__ = (
+        Index('idx_broker_symbol_exchange', 'broker', 'symbol', 'exchange'),
+        Index('idx_broker_token_exchange', 'broker', 'token', 'exchange'),
+        Index('idx_broker_brsymbol_exchange', 'broker', 'brsymbol', 'exchange'),
         Index('idx_symbol_exchange', 'symbol', 'exchange'),
         Index('idx_token_exchange', 'token', 'exchange'),
         Index('idx_brsymbol_exchange', 'brsymbol', 'exchange'),
