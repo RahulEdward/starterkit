@@ -31,6 +31,8 @@ frontend/.vite/
 
 # Electron
 frontend/out/
+dist-app/
+dist-portable/
 
 # IDE
 .vscode/
