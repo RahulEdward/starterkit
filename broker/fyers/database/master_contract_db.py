@@ -684,7 +684,7 @@ def master_contract_download():
     output_path = "tmp"
     try:
         download_csv_fyers_data(output_path)
-        delete_fyers_symbols()  # Delete existing symbols before reload
+        delete_symtoken_table()  # Delete existing symbols before reload
         token_df = process_fyers_nse_csv(output_path)
         copy_from_dataframe(token_df)
         token_df = process_fyers_bse_csv(output_path)
